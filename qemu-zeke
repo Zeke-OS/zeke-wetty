@@ -1,0 +1,5 @@
+#!/bin/bash
+cp /app/zeke-rootfs.img "$1"
+exec qemu-system-arm -kernel kernel.elf -sd "$1" \
+    -cpu arm1176 -m 256 -M raspi -nographic -serial stdio \
+    -monitor none

@@ -1,10 +1,12 @@
-var express = require('express');
-var http = require('http');
-var https = require('https');
-var path = require('path');
-var server = require('socket.io');
-var pty = require('pty.js');
-var fs = require('fs');
+const express = require('express');
+const http = require('http');
+const https = require('https');
+const path = require('path');
+const server = require('socket.io');
+const pty = require('pty.js');
+const { kill } = require('process');
+const fs = require('fs');
+const uniqueFilename = require('unique-filename');
 
 var opts = require('optimist')
     .options({
@@ -95,31 +97,19 @@ io.on('connection', function(socket){
     var sshuser = '';
     var request = socket.request;
     console.log((new Date()) + ' Connection accepted.');
-    if (match = request.headers.referer.match('/wetty/ssh/.+$')) {
-        sshuser = match[0].replace('/wetty/ssh/', '') + '@';
-    } else if (globalsshuser) {
-        sshuser = globalsshuser + '@';
-    }
+    const tmpfile = uniqueFilename('/tmp')
 
-    var term;
-    if (process.getuid() == 0) {
-        term = pty.spawn('/bin/login', [], {
-            name: 'xterm-256color',
-            cols: 80,
-            rows: 30
-        });
-    } else {
-        term = pty.spawn('ssh', [sshuser + sshhost, '-p', sshport, '-o', 'PreferredAuthentications=' + sshauth], {
-            name: 'xterm-256color',
-            cols: 80,
-            rows: 30
-        });
-    }
+    var term = pty.spawn('/app/qemu-zeke', [tmpfile], {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 30
+    });
     console.log((new Date()) + " PID=" + term.pid + " STARTED on behalf of user=" + sshuser)
     term.on('data', function(data) {
         socket.emit('output', data);
     });
     term.on('exit', function(code) {
+        fs.unlink(tmpfile);
         console.log((new Date()) + " PID=" + term.pid + " ENDED")
     });
     socket.on('resize', function(data) {
@@ -129,6 +119,7 @@ io.on('connection', function(socket){
         term.write(data);
     });
     socket.on('disconnect', function() {
+        process.kill(term.pid);
         term.end();
     });
 })
